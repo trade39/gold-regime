@@ -41,7 +41,18 @@ st.sidebar.header("Configuration")
 st.sidebar.markdown("Configure the data source and model parameters.")
 
 ticker = st.sidebar.text_input("Ticker Symbol", value="GC=F", help="Yahoo Finance Ticker")
-start_date = st.sidebar.date_input("Start Date", value=pd.to_datetime("2000-01-01"))
+
+# Timeframe Selection
+interval = st.sidebar.selectbox("Timeframe", options=['1d', '90m', '60m', '30m', '15m', '5m'], index=0)
+
+# Show start date only for daily data
+start_date = None
+if interval == '1d':
+    start_date = st.sidebar.date_input("Start Date", value=pd.to_datetime("2000-01-01"))
+    st.sidebar.caption("For daily data, you can choose a specific start date.")
+else:
+    st.sidebar.caption(f"Intraday data ({interval}) assumes 'max' recent history (~60 days).")
+
 fred_api_key = st.sidebar.text_input("FRED API Key (Optional)", type="password", help="Get one at fred.stlouisfed.org")
 k_regimes = st.sidebar.slider("Number of Regimes", min_value=2, max_value=3, value=3, help="3 = Bull/Bear/Consolidating")
 
@@ -52,10 +63,12 @@ run_btn = st.sidebar.button("Run Analysis")
 # Main Execution Block
 if run_btn:
     # 1. Fetch Data
-    with st.spinner(f"Fetching data for {ticker}..."):
+    with st.spinner(f"Fetching data for {ticker} ({interval})..."):
         try:
-            data = fetch_gold_data(ticker, start_date=str(start_date))
-            st.success(f"Successfully loaded {len(data)} trading days.")
+            # For intraday, we pass period="max" (or "60d" for safety)
+            # data.py logic handles defaults
+            data = fetch_gold_data(ticker, start_date=str(start_date) if start_date else None, interval=interval, period="max")
+            st.success(f"Successfully loaded {len(data)} bars.")
         except Exception as e:
             st.error(f"Error fetching data: {e}")
             st.stop()
@@ -63,8 +76,11 @@ if run_btn:
     # 2. Fetch FRED Data (Optional)
     macro_data = None
     if fred_api_key:
+        # Determine start date for FRED if not set (i.e. Intraday)
+        fred_start_date = start_date if start_date else (pd.Timestamp.now() - pd.Timedelta(days=60)).strftime('%Y-%m-%d')
+        
         with st.spinner("Fetching Macro Data from FRED..."):
-            macro_data = fetch_fred_data(fred_api_key, start_date=str(start_date))
+            macro_data = fetch_fred_data(fred_api_key, start_date=str(fred_start_date))
             if macro_data is not None:
                 st.success(f"Loaded Macro Indicators: {', '.join(macro_data.columns)}")
             
@@ -117,19 +133,3 @@ if run_btn:
 
     with col2:
         st.subheader("Regime Analysis Visuals")
-        # Update plot to handle potentially 3 regimes (the plot function checks columns so it should handle >2 if robust, otherwise needs update)
-        # We might need to check src/plots.py if it hardcodes 2 colors or regimes.
-        # For now, let's assume it handles whatever is in 'probs'.
-        fig = plot_price_and_regimes(data, probs)
-        st.pyplot(fig)
-        
-        if macro_data is not None:
-             st.subheader("Macro Indicators")
-             st.line_chart(macro_data[['10Y Yield', 'US Dollar Index']].dropna())
-    
-    # 4. Detailed Output
-    with st.expander("See Detailed Model Summary"):
-        st.text(summary)
-else:
-    st.info("👈 Please configure settings in the sidebar and click 'Run Analysis'.")
-
