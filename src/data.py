@@ -55,4 +55,8 @@ def fetch_gold_data(ticker="GC=F", start_date=None, period="max", interval="1d")
     df['Returns'] = np.log(df['Price'] / df['Price'].shift(1)) * 100
     df.dropna(inplace=True)
     
+    # Ensure index is timezone-naive for compatibility with matplotlib/statsmodels
+    if df.index.tz is not None:
+        df.index = df.index.tz_localize(None)
+    
     return df
