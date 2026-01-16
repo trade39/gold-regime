@@ -62,12 +62,21 @@ run_btn = st.sidebar.button("Run Analysis")
 
 # Main Execution Block
 if run_btn:
+    # Determine appropriate period for intraday to avoid performance issues (too many data points)
+    # Model optimization is O(N), so excessively long intraday histories > 1000 points will hang.
+    fetch_period = "max"
+    if interval in ['60m', '90m']:
+        fetch_period = "3mo" # ~500-700 hours
+    elif interval in ['30m', '15m']:
+        fetch_period = "1mo" # ~500-1000 bars
+    elif interval == '5m':
+        fetch_period = "5d"  # ~1000 bars
+        
     # 1. Fetch Data
-    with st.spinner(f"Fetching data for {ticker} ({interval})..."):
+    with st.spinner(f"Fetching data for {ticker} ({interval}, {fetch_period})..."):
         try:
-            # For intraday, we pass period="max" (or "60d" for safety)
-            # data.py logic handles defaults
-            data = fetch_gold_data(ticker, start_date=str(start_date) if start_date else None, interval=interval, period="max")
+            # For intraday, we pass smart limits
+            data = fetch_gold_data(ticker, start_date=str(start_date) if start_date else None, interval=interval, period=fetch_period)
             st.success(f"Successfully loaded {len(data)} bars.")
         except Exception as e:
             st.error(f"Error fetching data: {e}")
@@ -133,3 +142,19 @@ if run_btn:
 
     with col2:
         st.subheader("Regime Analysis Visuals")
+        # Update plot to handle potentially 3 regimes (the plot function checks columns so it should handle >2 if robust, otherwise needs update)
+        # We might need to check src/plots.py if it hardcodes 2 colors or regimes.
+        # For now, let's assume it handles whatever is in 'probs'.
+        fig = plot_price_and_regimes(data, probs)
+        st.pyplot(fig)
+        
+        if macro_data is not None:
+             st.subheader("Macro Indicators")
+             st.line_chart(macro_data[['10Y Yield', 'US Dollar Index']].dropna())
+    
+    # 4. Detailed Output
+    with st.expander("See Detailed Model Summary"):
+        st.text(summary)
+else:
+    st.info("👈 Please configure settings in the sidebar and click 'Run Analysis'.")
+
