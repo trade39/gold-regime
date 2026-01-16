@@ -145,8 +145,11 @@ if run_btn:
         # Update plot to handle potentially 3 regimes (the plot function checks columns so it should handle >2 if robust, otherwise needs update)
         # We might need to check src/plots.py if it hardcodes 2 colors or regimes.
         # For now, let's assume it handles whatever is in 'probs'.
-        fig = plot_price_and_regimes(data, probs)
-        st.pyplot(fig)
+        try:
+            fig = plot_price_and_regimes(data, probs)
+            st.pyplot(fig)
+        except Exception as e:
+            st.error(f"Error generating plot: {e}")
         
         if macro_data is not None:
              st.subheader("Macro Indicators")
