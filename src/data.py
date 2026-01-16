@@ -2,19 +2,27 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 
-def fetch_gold_data(ticker="GC=F", start_date="2000-01-01"):
+def fetch_gold_data(ticker="GC=F", start_date=None, period="max", interval="1d"):
     """
-    Fetches daily gold prices and calculates log returns.
+    Fetches gold prices and calculates log returns.
     
     Args:
         ticker (str): Ticker symbol (default "GC=F" for Gold Futures).
-        start_date (str): Start date for data fetching.
+        start_date (str): Start date for data fetching (used if interval is '1d').
+        period (str): Data period to download (e.g. '1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max').
+        interval (str): Data interval (e.g. '1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h', '1d', '5d', '1wk', '1mo', '3mo').
         
     Returns:
         pd.DataFrame: DataFrame with 'Price' and 'Returns' columns.
     """
-    print(f"Fetching data for {ticker} from {start_date}...")
-    df = yf.download(ticker, start=start_date, progress=False)
+    print(f"Fetching data for {ticker} (Interval: {interval}, Period: {period})...")
+    
+    # If Start Date is provided and interval is daily, prefer start date
+    if interval == "1d" and start_date:
+        df = yf.download(ticker, start=start_date, interval=interval, progress=False)
+    else:
+        # For intraday, use period
+        df = yf.download(ticker, period=period, interval=interval, progress=False)
     
     # Check if data is empty
     if df.empty:
