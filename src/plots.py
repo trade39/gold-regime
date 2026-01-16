@@ -22,16 +22,14 @@ def plot_price_and_regimes(data, probs):
     axes[0].legend(loc='upper left')
     
     # Plot Regime Probabilities
-    # probs usually has columns 0 and 1
-    # Check column names just in case
     cols = probs.columns
+    # Define a color palette (up to 5 regimes)
+    colors = ['blue', 'red', 'green', 'orange', 'purple']
     
-    axes[1].plot(probs.index, probs[cols[0]], label=f'Regime 0 Probability', color='blue', alpha=0.6, linewidth=1)
-    axes[1].plot(probs.index, probs[cols[1]], label=f'Regime 1 Probability', color='red', alpha=0.6, linewidth=1)
-    
-    # Fill areas to make it easier to read
-    axes[1].fill_between(probs.index, 0, probs[cols[0]], color='blue', alpha=0.1)
-    axes[1].fill_between(probs.index, 0, probs[cols[1]], color='red', alpha=0.1)
+    for i, col in enumerate(cols):
+        color = colors[i % len(colors)]
+        axes[1].plot(probs.index, probs[col], label=f'Regime {col}', color=color, alpha=0.6, linewidth=1)
+        axes[1].fill_between(probs.index, 0, probs[col], color=color, alpha=0.1)
     
     axes[1].set_ylabel('Probability', fontsize=12)
     axes[1].set_xlabel('Date', fontsize=12)
