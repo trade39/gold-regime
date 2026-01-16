@@ -3,6 +3,7 @@ import pandas as pd
 from src.data import fetch_gold_data
 from src.model import GoldRegimeModel
 from src.plots import plot_price_and_regimes
+from src.fred_data import fetch_fred_data
 
 # Page Config
 st.set_page_config(
@@ -41,6 +42,8 @@ st.sidebar.markdown("Configure the data source and model parameters.")
 
 ticker = st.sidebar.text_input("Ticker Symbol", value="GC=F", help="Yahoo Finance Ticker")
 start_date = st.sidebar.date_input("Start Date", value=pd.to_datetime("2000-01-01"))
+fred_api_key = st.sidebar.text_input("FRED API Key (Optional)", type="password", help="Get one at fred.stlouisfed.org")
+k_regimes = st.sidebar.slider("Number of Regimes", min_value=2, max_value=3, value=3, help="3 = Bull/Bear/Consolidating")
 
 st.sidebar.markdown("---")
 st.sidebar.info("Click **Run Analysis** to fetch data and train the model.")
@@ -57,13 +60,24 @@ if run_btn:
             st.error(f"Error fetching data: {e}")
             st.stop()
             
-    # 2. Fit Model
-    with st.spinner("Fitting Markov-Switching Model (Optimizing parameters)..."):
+    # 2. Fetch FRED Data (Optional)
+    macro_data = None
+    if fred_api_key:
+        with st.spinner("Fetching Macro Data from FRED..."):
+            macro_data = fetch_fred_data(fred_api_key, start_date=str(start_date))
+            if macro_data is not None:
+                st.success(f"Loaded Macro Indicators: {', '.join(macro_data.columns)}")
+            
+    # 3. Fit Model
+    with st.spinner(f"Fitting {k_regimes}-Regime Markov-Switching Model..."):
         try:
-            model = GoldRegimeModel(k_regimes=2)
+            model = GoldRegimeModel(k_regimes=k_regimes)
             summary = model.fit(data['Returns'])
             probs = model.predict_probs()
             stats = model.get_regime_stats()
+            
+            # Interpret Regimes
+            regime_labels = model.interpret_regimes(stats)
         except Exception as e:
             st.error(f"Error fitting model: {e}")
             st.stop()
@@ -78,33 +92,40 @@ if run_btn:
         st.subheader("Regime Statistics")
         st.dataframe(stats.style.format("{:.4f}"))
         
-        # Interpretation Logic
-        regime_0_vol = stats.loc['Volatility (Std Dev)', 'Regime 0']
-        regime_1_vol = stats.loc['Volatility (Std Dev)', 'Regime 1']
-        
-        high_vol_regime = "Regime 0" if regime_0_vol > regime_1_vol else "Regime 1"
-        low_vol_regime = "Regime 1" if high_vol_regime == "Regime 0" else "Regime 0"
-        
-        st.info(f"""
-        **Interpretation**:
-        - **{high_vol_regime}**: High Volatility
-        - **{low_vol_regime}**: Low Volatility
-        """)
-        
+        # Display Legend for Regimes
+        st.markdown("### Regime Interpretation")
+        for r, label in regime_labels.items():
+            st.write(f"- **{r}**: {label}")
+
         # Current State
         last_prob = probs.iloc[-1]
-        current_regime = 0 if last_prob[0] > last_prob[1] else 1
-        current_regime_name = f"Regime {current_regime}"
-        confidence = last_prob[current_regime]
+        # Find dominant regime
+        current_regime_idx = last_prob.argmax()
+        current_regime_name = f"Regime {current_regime_idx}"
+        current_label = regime_labels.get(current_regime_name, current_regime_name)
+        confidence = last_prob[current_regime_idx]
         
         st.markdown(f"### Current State ({data.index[-1].date()})")
-        st.metric("Dominant Regime", current_regime_name)
+        st.metric("Dominant Regime", current_label)
         st.metric("Probability", f"{confidence:.2%}")
+
+        if macro_data is not None:
+            st.markdown("### Macro Context")
+            latest_macro = macro_data.iloc[-1]
+            st.metric("10Y Yield", f"{latest_macro.get('10Y Yield', 0):.2f}%")
+            st.metric("Dollar Index", f"{latest_macro.get('US Dollar Index', 0):.2f}")
 
     with col2:
         st.subheader("Regime Analysis Visuals")
+        # Update plot to handle potentially 3 regimes (the plot function checks columns so it should handle >2 if robust, otherwise needs update)
+        # We might need to check src/plots.py if it hardcodes 2 colors or regimes.
+        # For now, let's assume it handles whatever is in 'probs'.
         fig = plot_price_and_regimes(data, probs)
         st.pyplot(fig)
+        
+        if macro_data is not None:
+             st.subheader("Macro Indicators")
+             st.line_chart(macro_data[['10Y Yield', 'US Dollar Index']].dropna())
     
     # 4. Detailed Output
     with st.expander("See Detailed Model Summary"):
