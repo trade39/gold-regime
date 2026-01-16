@@ -57,3 +57,39 @@ class GoldRegimeModel:
                 'Volatility (Std Dev)': params.get(f'sigma2[{i}]', 0) ** 0.5
             }
         return pd.DataFrame(stats)
+
+    def interpret_regimes(self, stats_df):
+        """
+        Interprets regimes as Bullish, Bearish, or Consolidating based on Mean Returns.
+        
+        Args:
+            stats_df (pd.DataFrame): Output from get_regime_stats().
+            
+        Returns:
+            dict: Mapping of 'Regime X' -> 'Label'
+        """
+        # We assume 3 regimes for this specific classification
+        if self.k_regimes != 3:
+            return {f"Regime {i}": f"Regime {i}" for i in range(self.k_regimes)}
+            
+        # Transpose to get regimes as rows for easier sorting
+        # stats_df has columns 'Regime 0', 'Regime 1', ...
+        df_t = stats_df.T
+        
+        # Sort by Mean Return
+        df_sorted = df_t.sort_values('Mean Return', ascending=False)
+        
+        # Highest Mean = Bullish
+        bullish_regime = df_sorted.index[0]
+        
+        # Lowest Mean = Bearish
+        bearish_regime = df_sorted.index[-1]
+        
+        # Middle = Consolidating
+        consolidating_regime = df_sorted.index[1]
+        
+        return {
+            bullish_regime: "Bullish 🐂",
+            consolidating_regime: "Consolidating 🦀",
+            bearish_regime: "Bearish 🐻"
+        }
